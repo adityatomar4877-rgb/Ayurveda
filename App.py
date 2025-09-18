@@ -1,7 +1,6 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-import plotly.express as px
 import json
 
 # -----------------------------
@@ -119,7 +118,6 @@ def save_diet_plan(patient_id, plan_dict):
     conn = sqlite3.connect('ayurdiet.db')
     c = conn.cursor()
     plan_json = json.dumps(plan_dict)
-    # Check if plan exists
     c.execute('SELECT id FROM diet_plans WHERE patient_id=?', (patient_id,))
     if c.fetchone():
         c.execute('UPDATE diet_plans SET plan=? WHERE patient_id=?', (plan_json, patient_id))
@@ -169,6 +167,14 @@ def login_page():
                     st.session_state.patient_data = {
                         'full_name':result[1],'height':result[2],'weight':result[3],'diseases':result[4],'working_days':result[5]
                     }
+                    # Generate diet plan automatically if not exists
+                    conn = sqlite3.connect('ayurdiet.db')
+                    c = conn.cursor()
+                    c.execute('SELECT plan FROM diet_plans WHERE patient_id=?', (st.session_state.user_id,))
+                    if not c.fetchone():
+                        plan = generate_diet_plan(result[2], result[3], result[4], result[5])
+                        save_diet_plan(st.session_state.user_id, plan)
+                    conn.close()
                 st.experimental_rerun()
             else:
                 st.error("Invalid credentials")
@@ -209,46 +215,21 @@ def patient_dashboard():
     if plan_data:
         plan = json.loads(plan_data[0])
         for meal, info in plan.items():
-            st.markdown(f"<div class='diet-card'><h4>{meal}</h4><p>{info['description']}</p><p>Calories: {info['calories']}, Tastes: {info['tastes']}, Nature: {info['nature']}</p></div>", unsafe_allow_html=True)
-    else:
-        st.info("No diet plan assigned yet.")
-
-def doctor_dashboard():
-    st.header("🩺 Doctor Dashboard")
-    conn = sqlite3.connect('ayurdiet.db')
-    c = conn.cursor()
-    c.execute('SELECT id, full_name, height, weight, diseases, working_days FROM patients')
-    patients = c.fetchall()
-    conn.close()
-
-    if patients:
-        df = pd.DataFrame(patients, columns=['id','Name','Height','Weight','Diseases','Working Days'])
-        st.dataframe(df[['Name','Height','Weight','Diseases','Working Days']])
-        patient_ids = df['id'].tolist()
-        selected_id = st.selectbox("Select patient to generate diet plan", patient_ids)
-        if st.button("✨ Auto Generate Diet Plan"):
-            patient_row = df[df['id']==selected_id].iloc[0]
-            auto_plan = generate_diet_plan(patient_row['Height'], patient_row['Weight'], patient_row['Diseases'], patient_row['Working Days'])
-            save_diet_plan(selected_id, auto_plan)
-            st.success("✅ Diet plan generated!")
+            st.markdown(f"<div class='diet-card'><h3>{meal}</h3><p>{info['description']}</p><p>Calories: {info['calories']}, Tastes: {info['tastes']}, Nature: {info['nature']}</p></div>", unsafe_allow_html=True)
 
 # -----------------------------
-# Main
+# Main app logic
 # -----------------------------
 def main():
     if st.session_state.current_page=='role_selection':
         role_selection_page()
     elif st.session_state.current_page=='login':
-        if st.session_state.user_role=='patient':
-            st.button("Register New Patient", on_click=lambda: st.session_state.update({'current_page':'registration'}))
         login_page()
     elif st.session_state.current_page=='registration':
         patient_registration_page()
     elif st.session_state.current_page=='dashboard' and st.session_state.logged_in:
         if st.session_state.user_role=='patient':
             patient_dashboard()
-        else:
-            doctor_dashboard()
 
-if __name__ == '__main__':
+if __name__=='__main__':
     main()
