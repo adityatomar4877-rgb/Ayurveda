@@ -1,325 +1,274 @@
 import streamlit as st
-import pandas as pd
 import sqlite3
+import pandas as pd
+from datetime import datetime
 
-# -------------------------
+# ----------------------------
 # Database Setup
-# -------------------------
-DB_FILE = "ayurdiet.db"
+# ----------------------------
+def init_db():
+    conn = sqlite3.connect("ayurdiet.db")
+    c = conn.cursor()
 
-def get_connection():
-    return sqlite3.connect(DB_FILE, check_same_thread=False)
-
-def create_tables():
-    conn = get_connection()
-    cur = conn.cursor()
-
-    # Patients
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS patients (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_name TEXT,
-        phone TEXT,
-        email TEXT UNIQUE,
-        height REAL,
-        weight REAL,
-        working_days INTEGER,
-        diseases TEXT,
-        password TEXT
-    )
+    # Patients Table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS patients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name TEXT,
+            phone TEXT UNIQUE,
+            email TEXT UNIQUE,
+            password TEXT,
+            height REAL,
+            weight REAL,
+            working_days INTEGER,
+            diseases TEXT
+        )
     """)
 
-    # Doctors
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS doctors (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        email TEXT UNIQUE,
-        password TEXT
-    )
+    # Doctors Table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS doctors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE,
+            password TEXT
+        )
     """)
 
-    # Diet Plans
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS diet_plans (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        patient_id INTEGER,
-        breakfast TEXT,
-        lunch TEXT,
-        dinner TEXT,
-        FOREIGN KEY(patient_id) REFERENCES patients(id)
-    )
+    # Diet Plans Table
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS diet_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER,
+            plan TEXT,
+            FOREIGN KEY(patient_id) REFERENCES patients(id)
+        )
     """)
 
-    conn.commit()
+    # Insert default doctor
+    c.execute("SELECT * FROM doctors WHERE email=?", ("doctor@ayur.com",))
+    if not c.fetchone():
+        c.execute("INSERT INTO doctors (email, password) VALUES (?, ?)", ("doctor@ayur.com", "1234"))
 
-    # Insert a default doctor if none exists
-    cur.execute("SELECT COUNT(*) FROM doctors")
-    if cur.fetchone()[0] == 0:
-        cur.execute("INSERT INTO doctors (name, email, password) VALUES (?, ?, ?)",
-                    ("Dr. Ayurveda", "doctor@ayur.com", "1234"))
-        conn.commit()
-
-    conn.close()
-
-create_tables()
-
-# -------------------------
-# DB Helper Functions
-# -------------------------
-def add_patient(full_name, phone, email, height, weight, working_days, diseases, password="1234"):
-    conn = get_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            INSERT INTO patients (full_name, phone, email, height, weight, working_days, diseases, password)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (full_name, phone, email.strip().lower(), height, weight, working_days, diseases, password.strip()))
-        conn.commit()
-    except sqlite3.IntegrityError:
-        pass
-    conn.close()
-
-def get_patient_by_email(email, password):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM patients WHERE email=? AND password=?", (email.strip().lower(), password.strip()))
-    row = cur.fetchone()
-    conn.close()
-    return row
-
-def get_doctor(email, password):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM doctors WHERE email=? AND password=?", (email.strip().lower(), password.strip()))
-    row = cur.fetchone()
-    conn.close()
-    return row
-
-def get_all_patients():
-    conn = get_connection()
-    df = pd.read_sql_query("SELECT id, full_name, email, phone, height, weight, working_days, diseases FROM patients", conn)
-    conn.close()
-    return df
-
-def set_diet_plan(patient_id, breakfast, lunch, dinner):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM diet_plans WHERE patient_id=?", (patient_id,))
-    cur.execute("""
-        INSERT INTO diet_plans (patient_id, breakfast, lunch, dinner)
-        VALUES (?, ?, ?, ?)
-    """, (patient_id, breakfast, lunch, dinner))
     conn.commit()
     conn.close()
 
-def get_diet_plan(patient_id):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT breakfast, lunch, dinner FROM diet_plans WHERE patient_id=?", (patient_id,))
-    row = cur.fetchone()
-    conn.close()
-    if row:
-        return {"Breakfast": row[0], "Lunch": row[1], "Dinner": row[2]}
-    return None
+init_db()
 
-# -------------------------
-# Streamlit Config + CSS
-# -------------------------
-st.set_page_config(page_title="AyurDiet 🌿", page_icon="🌱", layout="wide")
+# ----------------------------
+# Streamlit Config
+# ----------------------------
+st.set_page_config(
+    page_title="🌿 AyurDiet",
+    page_icon="🌱",
+    layout="wide"
+)
 
+# ----------------------------
+# Custom CSS
+# ----------------------------
 st.markdown("""
-    <style>
-        body {
-            background: linear-gradient(to right, rgba(232,245,233,0.8), rgba(241,248,233,0.8)),
-                        url("https://images.unsplash.com/photo-1603297631983-21a1c403f4b3") no-repeat center center fixed;
-            background-size: cover;
-        }
-        h1, h2, h3 {
-            color: #1b5e20;
-            font-family: 'Segoe UI', sans-serif;
-        }
-        .diet-card {
-            background: #ffffff;
-            border-radius: 16px;
-            padding: 20px;
-            margin: 10px 0;
-            box-shadow: 2px 4px 12px rgba(0,0,0,0.1);
-            transition: transform 0.2s ease-in-out;
-        }
-        .diet-card:hover {
-            transform: scale(1.02);
-            border: 2px solid #66bb6a;
-        }
-        .stButton>button {
-            background-color: #2e7d32;
-            color: white;
-            border-radius: 8px;
-            padding: 10px 20px;
-            font-size: 18px;
-            font-weight: bold;
-        }
-        .stButton>button:hover {
-            background-color: #1b5e20;
-        }
-        .landing {
-            text-align: center;
-            padding: 80px 20px;
-        }
-        .tagline {
-            font-size: 22px;
-            color: #33691e;
-            margin-bottom: 30px;
-        }
-    </style>
+<style>
+    body {
+        background: url('https://img.freepik.com/free-photo/ayurvedic-herbs-natural-medicine_23-2149390639.jpg') no-repeat center center fixed;
+        background-size: cover;
+    }
+    .main-header {
+        text-align: center;
+        padding: 2rem;
+        background: rgba(45, 80, 22, 0.9);
+        color: white;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+    }
+    .ayur-card {
+        background: rgba(255, 255, 255, 0.9);
+        padding: 2rem;
+        border-radius: 15px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        margin: 1rem 0;
+    }
+    .stButton > button {
+        background: linear-gradient(135deg, #2d5016, #4a7c59);
+        color: white;
+        border-radius: 10px;
+        border: none;
+        padding: 0.7rem 1.2rem;
+        font-size: 1rem;
+        font-weight: 600;
+        transition: 0.3s;
+    }
+    .stButton > button:hover {
+        transform: scale(1.05);
+        background: linear-gradient(135deg, #8b4513, #daa520);
+    }
+</style>
 """, unsafe_allow_html=True)
 
-# -------------------------
-# Session State
-# -------------------------
+# ----------------------------
+# Session State Init
+# ----------------------------
+if "page" not in st.session_state:
+    st.session_state.page = "landing"
 if "user_role" not in st.session_state:
     st.session_state.user_role = None
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "user_data" not in st.session_state:
-    st.session_state.user_data = None
-if "show_landing" not in st.session_state:
-    st.session_state.show_landing = True
+if "user_id" not in st.session_state:
+    st.session_state.user_id = None
 
-# -------------------------
+# ----------------------------
 # Pages
-# -------------------------
+# ----------------------------
 def landing_page():
     st.markdown("""
-        <div class="landing">
-            <h1>🌿 Welcome to AyurDiet 🌱</h1>
-            <p class="tagline">Personalized Ayurvedic Diet Plans for a Healthy Lifestyle</p>
-        </div>
+    <div class="main-header">
+        <h1>🌿 AyurDiet</h1>
+        <p>Ancient Ayurvedic Wisdom blended with Modern Nutrition</p>
+    </div>
     """, unsafe_allow_html=True)
 
-    if st.button("🚀 Get Started"):
-        st.session_state.show_landing = False
-        st.experimental_rerun()
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.markdown('<div class="ayur-card">', unsafe_allow_html=True)
+        st.write("✨ Welcome to AyurDiet! Choose your role to continue.")
+        if st.button("👨‍⚕️ Doctor Portal"):
+            st.session_state.user_role = "doctor"
+            st.session_state.page = "login"
+            st.rerun()
+        if st.button("👤 Patient Portal"):
+            st.session_state.user_role = "patient"
+            st.session_state.page = "login"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
 def login_page():
-    st.title("🌿 AyurDiet Login")
+    role = st.session_state.user_role
+    st.markdown(f"""
+    <div class="main-header">
+        <h2>🔑 {role.title()} Login</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    role = st.radio("Login as", ["Doctor", "Patient"])
-
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        if role == "Doctor":
-            doctor = get_doctor(email, password)
-            if doctor:
-                st.session_state.logged_in = True
-                st.session_state.user_role = "doctor"
-                st.session_state.user_data = {"id": doctor[0], "name": doctor[1]}
-                st.success(f"Welcome, Dr. {doctor[1]}! 🌱")
-            else:
-                st.error("Invalid Doctor credentials")
-        else:
-            patient = get_patient_by_email(email, password)
-            if patient:
-                st.session_state.logged_in = True
-                st.session_state.user_role = "patient"
-                st.session_state.user_data = {
-                    "id": patient[0], "full_name": patient[1], "email": patient[3]
-                }
-                st.success(f"Welcome, {patient[1]}! 🌿")
-            else:
-                st.error("Invalid Patient credentials")
-
-    st.markdown("---")
-    if role == "Patient":
-        st.markdown("👉 New here? Register below:")
-        if st.button("Register"):
-            patient_registration_page()
-
-def patient_registration_page():
-    st.title("📝 Patient Registration")
-
-    with st.form("register_form"):
-        full_name = st.text_input("Full Name")
-        phone = st.text_input("Phone Number")
+    with st.form("login_form"):
         email = st.text_input("Email")
-        height = st.number_input("Height (cm)", min_value=1, max_value=300)
-        weight = st.number_input("Weight (kg)", min_value=1, max_value=500)
-        working_days = st.selectbox("Working Days per Week", [1,2,3,4,5,6,7])
-        diseases = st.text_area("Past or Present Diseases")
         password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
 
-        submitted = st.form_submit_button("Register")
         if submitted:
-            add_patient(full_name, phone, email, height, weight, working_days, diseases, password)
-            st.success("🎉 Registration successful! Please login now.")
+            conn = sqlite3.connect("ayurdiet.db")
+            c = conn.cursor()
+            if role == "doctor":
+                c.execute("SELECT * FROM doctors WHERE email=? AND password=?", (email, password))
+            else:
+                c.execute("SELECT * FROM patients WHERE email=? AND password=?", (email, password))
+            user = c.fetchone()
+            conn.close()
+
+            if user:
+                st.session_state.user_id = user[0]
+                st.session_state.page = "dashboard"
+                st.success("✅ Login successful!")
+                st.rerun()
+            else:
+                st.error("❌ Invalid credentials")
+
+    if role == "patient":
+        st.info("New patient? Register below 👇")
+        if st.button("📝 Register Now"):
+            st.session_state.page = "register"
+            st.rerun()
+
+def register_page():
+    st.markdown("""
+    <div class="main-header">
+        <h2>📝 Patient Registration</h2>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.form("reg_form"):
+        full_name = st.text_input("Full Name *")
+        phone = st.text_input("Phone *")
+        email = st.text_input("Email *")
+        password = st.text_input("Password *", type="password")
+        height = st.number_input("Height (cm) *", min_value=50, max_value=250)
+        weight = st.number_input("Weight (kg) *", min_value=20.0, max_value=200.0)
+        working_days = st.selectbox("Working Days / Week *", list(range(1,8)))
+        diseases = st.text_area("Diseases (optional)")
+
+        submitted = st.form_submit_button("Complete Registration")
+        if submitted:
+            conn = sqlite3.connect("ayurdiet.db")
+            c = conn.cursor()
+            try:
+                c.execute("""INSERT INTO patients
+                    (full_name, phone, email, password, height, weight, working_days, diseases)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (full_name, phone, email, password, height, weight, working_days, diseases))
+                conn.commit()
+                conn.close()
+                st.success("✅ Registration successful! Please log in.")
+                st.session_state.page = "login"
+                st.rerun()
+            except sqlite3.IntegrityError:
+                st.error("⚠️ Email or phone already registered.")
 
 def doctor_dashboard():
-    st.title("🩺 Doctor Dashboard")
+    st.markdown("""
+    <div class="main-header">
+        <h2>👨‍⚕️ Doctor Dashboard</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    df = get_all_patients()
-    st.subheader("👥 Patient List")
-    st.dataframe(df, use_container_width=True)
+    st.metric("Active Patients", "32")
+    st.metric("Diet Plans Created", "18")
 
-    st.markdown("---")
-    st.subheader("📋 Assign Diet Plan")
+    st.write("📋 Patient List")
+    conn = sqlite3.connect("ayurdiet.db")
+    df = pd.read_sql("SELECT id, full_name, email, height, weight FROM patients", conn)
+    conn.close()
+    st.dataframe(df)
 
-    if not df.empty:
-        selected_id = st.selectbox("Select Patient ID", df["id"].tolist())
-        breakfast = st.text_area("🥣 Breakfast Plan")
-        lunch = st.text_area("🍲 Lunch Plan")
-        dinner = st.text_area("🍛 Dinner Plan")
-
-        if st.button("Save Diet Plan"):
-            set_diet_plan(selected_id, breakfast, lunch, dinner)
-            st.success("✅ Diet plan saved successfully!")
-    else:
-        st.info("No patients registered yet.")
-
-    if st.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.user_role = None
-        st.session_state.show_landing = True
-        st.experimental_rerun()
+    if st.button("🚪 Logout"):
+        st.session_state.page = "landing"
+        st.session_state.user_id = None
+        st.rerun()
 
 def patient_dashboard():
-    st.title("👤 Patient Dashboard")
-    st.write(f"Welcome, {st.session_state.user_data['full_name']} 🌱")
+    st.markdown("""
+    <div class="main-header">
+        <h2>👤 Patient Dashboard</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.subheader("🥗 Your Assigned Diet Plan")
+    conn = sqlite3.connect("ayurdiet.db")
+    c = conn.cursor()
+    c.execute("SELECT full_name, height, weight, diseases FROM patients WHERE id=?", (st.session_state.user_id,))
+    patient = c.fetchone()
+    conn.close()
 
-    plan = get_diet_plan(st.session_state.user_data["id"])
-    if plan:
-        for meal, desc in plan.items():
-            st.markdown(f"""
-                <div class="diet-card">
-                    <h3>{meal}</h3>
-                    <p>{desc}</p>
-                </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.info("No diet plan assigned yet. Please wait for your doctor.")
+    st.subheader(f"Welcome, {patient[0]} 🌱")
+    st.write(f"Height: {patient[1]} cm | Weight: {patient[2]} kg")
+    st.write(f"Diseases: {patient[3]}")
 
-    if st.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.user_role = None
-        st.session_state.show_landing = True
-        st.experimental_rerun()
+    st.info("🥗 Your personalized diet plan will appear here soon!")
 
-# -------------------------
-# Main App
-# -------------------------
+    if st.button("🚪 Logout"):
+        st.session_state.page = "landing"
+        st.session_state.user_id = None
+        st.rerun()
+
+# ----------------------------
+# Main Controller
+# ----------------------------
 def main():
-    if st.session_state.show_landing:
+    if st.session_state.page == "landing":
         landing_page()
-    elif not st.session_state.logged_in:
+    elif st.session_state.page == "login":
         login_page()
-    else:
+    elif st.session_state.page == "register":
+        register_page()
+    elif st.session_state.page == "dashboard":
         if st.session_state.user_role == "doctor":
             doctor_dashboard()
-        elif st.session_state.user_role == "patient":
+        else:
             patient_dashboard()
 
 if __name__ == "__main__":
