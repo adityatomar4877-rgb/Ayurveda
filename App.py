@@ -310,10 +310,11 @@ def main():
         else:
             st.error("Unknown user role. Please log out and log in again.")
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     try:
         main()
     except Exception:
         # Show full traceback inside Streamlit to make debugging easier
         st.error("An unexpected error occurred. See traceback below:")
         st.text(traceback.format_exc())
+
