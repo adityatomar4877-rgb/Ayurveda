@@ -13,6 +13,7 @@ def get_connection():
 def create_tables():
     conn = get_connection()
     cur = conn.cursor()
+
     # Patients
     cur.execute("""
     CREATE TABLE IF NOT EXISTS patients (
@@ -27,6 +28,7 @@ def create_tables():
         password TEXT
     )
     """)
+
     # Doctors
     cur.execute("""
     CREATE TABLE IF NOT EXISTS doctors (
@@ -36,6 +38,7 @@ def create_tables():
         password TEXT
     )
     """)
+
     # Diet Plans
     cur.execute("""
     CREATE TABLE IF NOT EXISTS diet_plans (
@@ -47,27 +50,30 @@ def create_tables():
         FOREIGN KEY(patient_id) REFERENCES patients(id)
     )
     """)
+
     conn.commit()
     conn.close()
 
 create_tables()
 
 # -------------------------
-# Default Users (for testing)
+# Add default users
 # -------------------------
 def add_default_users():
     conn = get_connection()
     cur = conn.cursor()
-    # Add default doctor
+
+    # Check if already exists
     cur.execute("SELECT * FROM doctors WHERE email='doctor@ayur.com'")
     if not cur.fetchone():
         cur.execute("INSERT INTO doctors (name, email, password) VALUES (?,?,?)",
                     ("Dr. Smith", "doctor@ayur.com", "1234"))
-    # Add default patient
+
     cur.execute("SELECT * FROM patients WHERE email='test@pat.com'")
     if not cur.fetchone():
-        cur.execute("INSERT INTO patients (full_name, phone, email, height, weight, working_days, diseases, password) VALUES (?,?,?,?,?,?,?,?,?)",
+        cur.execute("INSERT INTO patients (full_name, phone, email, height, weight, working_days, diseases, password) VALUES (?,?,?,?,?,?,?,?)",
                     ("Test Patient","9999999999","test@pat.com",170,70,5,"None","1234"))
+
     conn.commit()
     conn.close()
 
@@ -76,7 +82,7 @@ add_default_users()
 # -------------------------
 # DB Helper Functions
 # -------------------------
-def add_patient(full_name, phone, email, height, weight, working_days, diseases, password="1234"):
+def add_patient(full_name, phone, email, height, weight, working_days, diseases, password):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""
@@ -86,22 +92,20 @@ def add_patient(full_name, phone, email, height, weight, working_days, diseases,
     conn.commit()
     conn.close()
 
-def get_patient_by_login(user_input, password):
-    """Login using email or phone + password"""
+def get_patient_by_email_or_phone(login_input, password):
     conn = get_connection()
     cur = conn.cursor()
-    # Check email
-    cur.execute("SELECT * FROM patients WHERE email=?", (user_input,))
+    cur.execute("SELECT * FROM patients WHERE (email=? OR phone=?) AND password=?", (login_input, login_input, password))
     row = cur.fetchone()
-    # If not found by email, check phone
-    if not row:
-        cur.execute("SELECT * FROM patients WHERE phone=?", (user_input,))
-        row = cur.fetchone()
     conn.close()
-    # Validate password
-    if row and row[8] == password:
-        return row
-    return None
+    return row
+
+def add_doctor(name, email, password):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO doctors (name, email, password) VALUES (?, ?, ?)", (name, email, password))
+    conn.commit()
+    conn.close()
 
 def get_doctor(email, password):
     conn = get_connection()
@@ -143,21 +147,7 @@ def get_diet_plan(patient_id):
 # -------------------------
 st.set_page_config(page_title="AyurDiet - Ayurvedic Diet Management", page_icon="🌿", layout="wide")
 
-# UI CSS
-st.markdown("""
-<style>
-body {
-    background: linear-gradient(to right, #f0f4f7, #e6f0e6);
-}
-.stButton>button {
-    background: linear-gradient(135deg, #2d5016 0%, #4a7c59 100%);
-    color: white;
-    font-weight: bold;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Session State
+# Initialize session
 if "user_role" not in st.session_state:
     st.session_state.user_role = None
 if "logged_in" not in st.session_state:
@@ -171,12 +161,13 @@ if "user_data" not in st.session_state:
 def login_page():
     st.title("🌿 AyurDiet Login")
     role = st.radio("Login as", ["Doctor", "Patient"])
-    user_input = st.text_input("Email or Phone (for patient)")
+
+    login_input = st.text_input("Email or Phone")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
         if role == "Doctor":
-            doctor = get_doctor(user_input, password)
+            doctor = get_doctor(login_input, password)
             if doctor:
                 st.session_state.logged_in = True
                 st.session_state.user_role = "doctor"
@@ -185,7 +176,7 @@ def login_page():
             else:
                 st.error("Invalid Doctor credentials")
         else:
-            patient = get_patient_by_login(user_input, password)
+            patient = get_patient_by_email_or_phone(login_input, password)
             if patient:
                 st.session_state.logged_in = True
                 st.session_state.user_role = "patient"
@@ -211,6 +202,7 @@ def patient_registration_page():
         working_days = st.selectbox("Working Days per Week", [1,2,3,4,5,6,7])
         diseases = st.text_area("Past or Present Diseases")
         password = st.text_input("Password", type="password")
+
         submitted = st.form_submit_button("Register")
         if submitted:
             add_patient(full_name, phone, email, height, weight, working_days, diseases, password)
@@ -221,14 +213,17 @@ def doctor_dashboard():
     df = get_all_patients()
     st.subheader("Patient List")
     st.dataframe(df, use_container_width=True)
+
     st.markdown("---")
     st.subheader("Assign Diet Plan")
+
     patient_ids = df["id"].tolist()
     if patient_ids:
         selected_id = st.selectbox("Select Patient ID", patient_ids)
         breakfast = st.text_area("Breakfast Plan")
         lunch = st.text_area("Lunch Plan")
         dinner = st.text_area("Dinner Plan")
+
         if st.button("Save Diet Plan"):
             set_diet_plan(selected_id, breakfast, lunch, dinner)
             st.success("Diet plan saved successfully!")
@@ -236,8 +231,10 @@ def doctor_dashboard():
 def patient_dashboard():
     st.title("👤 Patient Dashboard")
     st.write(f"Welcome, {st.session_state.user_data['full_name']}")
+
     st.markdown("---")
     st.subheader("Your Assigned Diet Plan")
+
     plan = get_diet_plan(st.session_state.user_data["id"])
     if plan:
         for meal, desc in plan.items():
