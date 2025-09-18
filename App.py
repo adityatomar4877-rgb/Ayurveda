@@ -5,16 +5,6 @@ import random
 import traceback
 
 # -------------------------
-# Load Dataset
-# -------------------------
-CSV_PATH = r"C:\Users\adity\Downloads\ayurvedic_health_dataset_large.csv"
-try:
-    food_df = pd.read_csv(CSV_PATH)
-except:
-    st.warning("⚠ Dataset not found. Default meals will be used.")
-    food_df = pd.DataFrame(columns=["Food","Category","SafeFor"])
-
-# -------------------------
 # Database Setup
 # -------------------------
 DB_FILE = "ayurdiet.db"
@@ -25,6 +15,7 @@ def get_connection():
 def create_tables():
     conn = get_connection()
     cur = conn.cursor()
+
     # Patients
     cur.execute("""
     CREATE TABLE IF NOT EXISTS patients (
@@ -37,7 +28,9 @@ def create_tables():
         working_days INTEGER,
         diseases TEXT,
         password TEXT
-    )""")
+    )
+    """)
+
     # Doctors
     cur.execute("""
     CREATE TABLE IF NOT EXISTS doctors (
@@ -45,7 +38,9 @@ def create_tables():
         name TEXT,
         email TEXT UNIQUE,
         password TEXT
-    )""")
+    )
+    """)
+
     # Diet Plans
     cur.execute("""
     CREATE TABLE IF NOT EXISTS diet_plans (
@@ -55,31 +50,30 @@ def create_tables():
         lunch TEXT,
         dinner TEXT,
         FOREIGN KEY(patient_id) REFERENCES patients(id)
-    )""")
+    )
+    """)
     conn.commit()
     conn.close()
 
 create_tables()
 
 # -------------------------
-# Default users
+# Insert Default Users
 # -------------------------
 def add_default_users():
     conn = get_connection()
     cur = conn.cursor()
     try:
-        # Doctor
         cur.execute("SELECT * FROM doctors WHERE email='doctor@ayur.com'")
         if not cur.fetchone():
             cur.execute("INSERT INTO doctors (name,email,password) VALUES (?,?,?)",
                         ("Dr. Smith","doctor@ayur.com","1234"))
-        # Patient
         cur.execute("SELECT * FROM patients WHERE email='test@pat.com'")
         if not cur.fetchone():
-            cur.execute("""INSERT INTO patients
-            (full_name, phone, email, height, weight, working_days, diseases, password)
-            VALUES (?,?,?,?,?,?,?,?,?)""",
-            ("Test Patient","9999999999","test@pat.com",170,70,5,"None","1234"))
+            cur.execute("""INSERT INTO patients 
+                (full_name, phone, email, height, weight, working_days, diseases, password)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                ("Test Patient","9999999999","test@pat.com",170,70,5,"None","1234"))
         conn.commit()
     except:
         pass
@@ -89,14 +83,68 @@ def add_default_users():
 add_default_users()
 
 # -------------------------
-# Helper Functions
+# Load Dataset
+# -------------------------
+st.sidebar.header("Upload Dataset")
+uploaded_file = st.sidebar.file_uploader("Upload Ayurvedic Food Dataset (CSV)", type="csv")
+if uploaded_file:
+    food_df = pd.read_csv(uploaded_file)
+else:
+    st.sidebar.warning("⚠ Dataset not found. Default meals will be used.")
+    food_df = pd.DataFrame(columns=["Food","Category","SafeFor"])
+
+# -------------------------
+# Diet Generator
+# -------------------------
+def generate_diet(weight, height, disease=None):
+    calories = round(weight*30)
+    protein = round(weight*1.2)
+    fat = round((0.25*calories)/9)
+    carbs = round((calories - (protein*4 + fat*9))/4)
+    scale = calories/2000
+
+    if disease:
+        disease = disease.lower()
+        safe_foods = food_df[food_df["SafeFor"].str.contains(disease, case=False, na=False)]
+        if safe_foods.empty:
+            safe_foods = food_df
+    else:
+        safe_foods = food_df
+
+    def pick_food(category):
+        items = safe_foods[safe_foods["Category"]==category]
+        return random.choice(items["Food"].tolist()) if not items.empty else "Ayurvedic meal"
+
+    plan = {
+        "Breakfast": f"{pick_food('Breakfast')} + Tulsi tea",
+        "Mid-morning": f"{pick_food('Snack')} + soaked chia seeds",
+        "Lunch": f"{pick_food('Lunch')} + Salad + Buttermilk",
+        "Snack": f"{pick_food('Snack')} + Herbal tea",
+        "Dinner": f"{pick_food('Dinner')} + Steamed veggies + Triphala water",
+        "Bedtime": "Warm turmeric milk with ashwagandha"
+    }
+
+    nutrients = {
+        "Calories": calories,
+        "Protein (g)": protein,
+        "Carbs (g)": carbs,
+        "Fats (g)": fat,
+        "Fiber (g)": int(25*scale),
+        "Calcium (mg)": int(600*scale),
+        "Iron (mg)": int(14*scale)
+    }
+
+    return plan, nutrients
+
+# -------------------------
+# DB Helper Functions
 # -------------------------
 def add_patient(full_name, phone, email, height, weight, working_days, diseases, password):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("""INSERT INTO patients
         (full_name, phone, email, height, weight, working_days, diseases, password)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (full_name, phone, email, height, weight, working_days, diseases, password))
     conn.commit()
     conn.close()
@@ -128,7 +176,7 @@ def set_diet_plan(patient_id, breakfast, lunch, dinner):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("DELETE FROM diet_plans WHERE patient_id=?", (patient_id,))
-    cur.execute("INSERT INTO diet_plans (patient_id, breakfast, lunch, dinner) VALUES (?,?,?,?)",
+    cur.execute("INSERT INTO diet_plans (patient_id, breakfast, lunch, dinner) VALUES (?, ?, ?, ?)",
                 (patient_id, breakfast, lunch, dinner))
     conn.commit()
     conn.close()
@@ -144,48 +192,9 @@ def get_diet_plan(patient_id):
     return None
 
 # -------------------------
-# Diet Generator
-# -------------------------
-def generate_diet(weight, height, disease=None):
-    calories = round(weight * 30)
-    protein = round(weight * 1.2)
-    fat = round((0.25 * calories)/9)
-    carbs = round((calories - (protein*4 + fat*9))/4)
-
-    # Filter by disease
-    safe_foods = food_df
-    if disease:
-        disease = disease.lower()
-        safe_foods = food_df[food_df["SafeFor"].str.contains(disease, case=False, na=False)]
-        if safe_foods.empty:
-            safe_foods = food_df
-
-    def pick_food(category):
-        items = safe_foods[safe_foods["Category"]==category] if not safe_foods.empty else []
-        if len(items):
-            return random.choice(items["Food"].tolist())
-        return "Ayurvedic meal"
-
-    plan = {
-        "Breakfast": f"{pick_food('Breakfast')} + Tulsi tea",
-        "Lunch": f"{pick_food('Lunch')} + Salad + Buttermilk",
-        "Dinner": f"{pick_food('Dinner')} + Steamed veggies"
-    }
-
-    nutrients = {
-        "Calories": calories,
-        "Protein (g)": protein,
-        "Carbs (g)": carbs,
-        "Fat (g)": fat
-    }
-
-    return plan, nutrients
-
-# -------------------------
 # Streamlit Config & Styling
 # -------------------------
 st.set_page_config(page_title="AyurDiet", page_icon="🌿", layout="wide")
-
 if "user_role" not in st.session_state:
     st.session_state.user_role = None
 if "logged_in" not in st.session_state:
@@ -197,22 +206,8 @@ if "page" not in st.session_state:
 
 st.markdown("""
 <style>
-body {
-    background: linear-gradient(to right, #f0fdf4, #e6f4ea);
-}
-.stButton>button {
-    background: linear-gradient(135deg, #2d5016, #4a7c59);
-    color: white;
-    border-radius: 10px;
-    padding: 8px 15px;
-}
-.card {
-    background: #ffffffcc;
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
-}
+body {background: linear-gradient(to right,#f0fdf4,#e6f4ea);}
+.stButton>button{background: linear-gradient(135deg,#2d5016,#4a7c59);color:white;border-radius:10px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -221,53 +216,58 @@ body {
 # -------------------------
 def login_page():
     st.title("🌿 AyurDiet Login")
-    role = st.radio("Login as", ["Doctor", "Patient"])
+    role = st.radio("Login as", ["Doctor","Patient"])
     login_input = st.text_input("Email or Phone")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
         if role=="Doctor":
-            doctor = get_doctor(login_input, password)
+            doctor = get_doctor(login_input,password)
             if doctor:
                 st.session_state.logged_in=True
                 st.session_state.user_role="doctor"
-                st.session_state.user_data={"id":doctor[0], "name":doctor[1]}
+                st.session_state.user_data={"id":doctor[0],"name":doctor[1]}
                 st.success("Doctor logged in!")
+                st.experimental_rerun()
             else:
                 st.error("Invalid Doctor credentials")
         else:
-            patient = get_patient_by_email_or_phone(login_input, password)
+            patient = get_patient_by_email_or_phone(login_input,password)
             if patient:
                 st.session_state.logged_in=True
                 st.session_state.user_role="patient"
-                st.session_state.user_data={"id":patient[0], "name":patient[1]}
+                st.session_state.user_data={"id":patient[0],"name":patient[1]}
                 st.success("Patient logged in!")
+                st.experimental_rerun()
             else:
                 st.error("Invalid Patient credentials")
+
     if role=="Patient":
         if st.button("New user? Register here"):
             st.session_state.page="register"
+            st.experimental_rerun()
 
 def patient_registration_page():
     st.title("🌿 Patient Registration")
     with st.form("register_form"):
         full_name = st.text_input("Full Name")
-        phone = st.text_input("Phone")
+        phone = st.text_input("Phone Number")
         email = st.text_input("Email")
-        height = st.number_input("Height (cm)", min_value=50,max_value=250)
-        weight = st.number_input("Weight (kg)", min_value=20,max_value=200)
-        working_days = st.selectbox("Working Days / Week", list(range(1,8)))
-        diseases = st.text_area("Diseases (if any)")
+        height = st.number_input("Height (cm)", min_value=1, max_value=300)
+        weight = st.number_input("Weight (kg)", min_value=1, max_value=500)
+        working_days = st.selectbox("Working Days per Week", [1,2,3,4,5,6,7])
+        diseases = st.text_area("Past or Present Diseases")
         password = st.text_input("Password", type="password")
         submitted = st.form_submit_button("Register")
         if submitted:
             try:
                 add_patient(full_name, phone, email, height, weight, working_days, diseases, password)
-                st.success("✅ Registration successful! Please login.")
+                st.success("Registration successful! Please login.")
                 st.session_state.page="login"
+                st.experimental_rerun()
             except sqlite3.IntegrityError:
-                st.error("⚠ Email or phone already exists!")
-            except:
+                st.error("Email or phone already exists!")
+            except Exception:
                 st.error("Registration failed.")
                 st.text(traceback.format_exc())
 
@@ -275,7 +275,8 @@ def doctor_dashboard():
     st.title("🩺 Doctor Dashboard")
     df = get_all_patients()
     st.subheader("Patient List")
-    st.dataframe(df)
+    st.dataframe(df, use_container_width=True)
+
     st.markdown("---")
     st.subheader("Assign Diet Plan")
     patient_ids = df["id"].tolist() if not df.empty else []
@@ -288,51 +289,45 @@ def doctor_dashboard():
             try:
                 set_diet_plan(selected_id, breakfast, lunch, dinner)
                 st.success("Diet plan saved!")
-            except:
+            except Exception:
                 st.error("Failed to save diet plan.")
                 st.text(traceback.format_exc())
     else:
         st.info("No patients available yet.")
+
     if st.button("Logout"):
         st.session_state.logged_in=False
         st.session_state.page="login"
         st.session_state.user_role=None
         st.session_state.user_data=None
+        st.experimental_rerun()
 
 def patient_dashboard():
     name = st.session_state.user_data.get("name") if st.session_state.user_data else "Patient"
     st.title("👤 Patient Dashboard")
-    st.subheader(f"Welcome, {name}")
+    st.write(f"Welcome, {name}")
+    st.markdown("---")
     user_id = st.session_state.user_data.get("id") if st.session_state.user_data else None
     if user_id:
         plan = get_diet_plan(user_id)
+        st.subheader("Your Assigned Diet Plan")
         if plan:
-            st.subheader("🥗 Your Assigned Diet Plan")
             for meal, desc in plan.items():
-                st.markdown(f"**{meal}:** {desc}")
+                st.markdown(f"{meal}:** {desc}")
         else:
-            # Generate diet plan if none assigned
-            conn = get_connection()
-            cur = conn.cursor()
-            cur.execute("SELECT weight, height, diseases FROM patients WHERE id=?", (user_id,))
-            patient = cur.fetchone()
-            conn.close()
-            if patient:
-                weight, height, disease = patient[0], patient[1], patient[2]
-                plan, nutrients = generate_diet(weight, height, disease)
-                st.subheader("🥗 Your Generated Diet Plan")
-                for meal, desc in plan.items():
-                    st.markdown(f"**{meal}:** {desc}")
-                st.subheader("📊 Nutritional Info")
-                st.table(pd.DataFrame([nutrients]))
+            st.info("No diet plan assigned yet. Please wait for your doctor.")
+    else:
+        st.error("No user id found. Please log in again.")
+
     if st.button("Logout"):
         st.session_state.logged_in=False
         st.session_state.page="login"
         st.session_state.user_role=None
         st.session_state.user_data=None
+        st.experimental_rerun()
 
 # -------------------------
-# Main
+# Main App
 # -------------------------
 def main():
     if not st.session_state.logged_in:
@@ -346,7 +341,7 @@ def main():
         elif st.session_state.user_role=="patient":
             patient_dashboard()
         else:
-            st.error("Unknown role. Logout and try again.")
+            st.error("Unknown role. Log out and login again.")
 
 if __name__=="__main__":
     main()
