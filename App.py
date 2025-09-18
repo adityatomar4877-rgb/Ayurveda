@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-from datetime import datetime
 
 # -------------------------
 # Database Setup
@@ -53,6 +52,14 @@ def create_tables():
     """)
 
     conn.commit()
+
+    # Insert a default doctor if none exists
+    cur.execute("SELECT COUNT(*) FROM doctors")
+    if cur.fetchone()[0] == 0:
+        cur.execute("INSERT INTO doctors (name, email, password) VALUES (?, ?, ?)",
+                    ("Dr. Ayurveda", "doctor@ayur.com", "1234"))
+        conn.commit()
+
     conn.close()
 
 create_tables()
@@ -77,13 +84,6 @@ def get_patient_by_email(email, password):
     row = cur.fetchone()
     conn.close()
     return row
-
-def add_doctor(name, email, password):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("INSERT INTO doctors (name, email, password) VALUES (?, ?, ?)", (name, email, password))
-    conn.commit()
-    conn.close()
 
 def get_doctor(email, password):
     conn = get_connection()
@@ -121,11 +121,32 @@ def get_diet_plan(patient_id):
     return None
 
 # -------------------------
-# Streamlit Config
+# Streamlit Config + CSS
 # -------------------------
-st.set_page_config(page_title="AyurDiet - Ayurvedic Diet Management", page_icon="🌿", layout="wide")
+st.set_page_config(page_title="AyurDiet 🌿", page_icon="🌿", layout="wide")
 
-# Initialize session
+st.markdown("""
+    <style>
+        .main {
+            background-color: #f4f9f4;
+        }
+        h1, h2, h3 {
+            color: #2e7d32;
+        }
+        .diet-card {
+            background: #ffffff;
+            border: 2px solid #a5d6a7;
+            border-radius: 12px;
+            padding: 15px;
+            margin: 10px 0;
+            box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# -------------------------
+# Session State
+# -------------------------
 if "user_role" not in st.session_state:
     st.session_state.user_role = None
 if "logged_in" not in st.session_state:
@@ -151,7 +172,7 @@ def login_page():
                 st.session_state.logged_in = True
                 st.session_state.user_role = "doctor"
                 st.session_state.user_data = {"id": doctor[0], "name": doctor[1]}
-                st.success("Doctor logged in!")
+                st.success(f"Welcome, Dr. {doctor[1]}!")
             else:
                 st.error("Invalid Doctor credentials")
         else:
@@ -162,18 +183,18 @@ def login_page():
                 st.session_state.user_data = {
                     "id": patient[0], "full_name": patient[1], "email": patient[3]
                 }
-                st.success("Patient logged in!")
+                st.success(f"Welcome, {patient[1]}!")
             else:
                 st.error("Invalid Patient credentials")
 
     st.markdown("---")
     if role == "Patient":
-        st.markdown("New user?")
+        st.markdown("👉 New here? Register below:")
         if st.button("Register"):
             patient_registration_page()
 
 def patient_registration_page():
-    st.title("🌿 Patient Registration")
+    st.title("📝 Patient Registration")
 
     with st.form("register_form"):
         full_name = st.text_input("Full Name")
@@ -188,40 +209,46 @@ def patient_registration_page():
         submitted = st.form_submit_button("Register")
         if submitted:
             add_patient(full_name, phone, email, height, weight, working_days, diseases, password)
-            st.success("Registration successful! Please login.")
+            st.success("🎉 Registration successful! Please login now.")
 
 def doctor_dashboard():
     st.title("🩺 Doctor Dashboard")
 
     df = get_all_patients()
-    st.subheader("Patient List")
+    st.subheader("👥 Patient List")
     st.dataframe(df, use_container_width=True)
 
     st.markdown("---")
-    st.subheader("Assign Diet Plan")
+    st.subheader("📋 Assign Diet Plan")
 
-    patient_ids = df["id"].tolist()
-    if patient_ids:
-        selected_id = st.selectbox("Select Patient ID", patient_ids)
-        breakfast = st.text_area("Breakfast Plan")
-        lunch = st.text_area("Lunch Plan")
-        dinner = st.text_area("Dinner Plan")
+    if not df.empty:
+        selected_id = st.selectbox("Select Patient ID", df["id"].tolist())
+        breakfast = st.text_area("🥣 Breakfast Plan")
+        lunch = st.text_area("🍲 Lunch Plan")
+        dinner = st.text_area("🍛 Dinner Plan")
 
         if st.button("Save Diet Plan"):
             set_diet_plan(selected_id, breakfast, lunch, dinner)
-            st.success("Diet plan saved successfully!")
+            st.success("✅ Diet plan saved successfully!")
+    else:
+        st.info("No patients registered yet.")
 
 def patient_dashboard():
     st.title("👤 Patient Dashboard")
-    st.write(f"Welcome, {st.session_state.user_data['full_name']}")
+    st.write(f"Welcome, {st.session_state.user_data['full_name']} 🌱")
 
     st.markdown("---")
-    st.subheader("Your Assigned Diet Plan")
+    st.subheader("🥗 Your Assigned Diet Plan")
 
     plan = get_diet_plan(st.session_state.user_data["id"])
     if plan:
         for meal, desc in plan.items():
-            st.markdown(f"**{meal}:** {desc}")
+            st.markdown(f"""
+                <div class="diet-card">
+                    <h3>{meal}</h3>
+                    <p>{desc}</p>
+                </div>
+            """, unsafe_allow_html=True)
     else:
         st.info("No diet plan assigned yet. Please wait for your doctor.")
 
