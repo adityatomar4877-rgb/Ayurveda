@@ -15,6 +15,8 @@ def get_connection():
 def create_tables():
     conn = get_connection()
     cur = conn.cursor()
+
+    # Patients table
     cur.execute("""
     CREATE TABLE IF NOT EXISTS patients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,6 +30,8 @@ def create_tables():
         password TEXT
     )
     """)
+
+    # Doctors table
     cur.execute("""
     CREATE TABLE IF NOT EXISTS doctors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,6 +40,8 @@ def create_tables():
         password TEXT
     )
     """)
+
+    # Diet Plans table
     cur.execute("""
     CREATE TABLE IF NOT EXISTS diet_plans (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,66 +58,31 @@ def create_tables():
 create_tables()
 
 # -------------------------
-# Insert Default Users
+# Insert default users
 # -------------------------
 def add_default_users():
     conn = get_connection()
     cur = conn.cursor()
     try:
+        # Default doctor
         cur.execute("SELECT * FROM doctors WHERE email='doctor@ayur.com'")
         if not cur.fetchone():
-            cur.execute("INSERT INTO doctors (name,email,password) VALUES (?,?,?)",
-                        ("Dr. Smith","doctor@ayur.com","1234"))
+            cur.execute("INSERT INTO doctors (name, email, password) VALUES (?, ?, ?)",
+                        ("Dr. Smith", "doctor@ayur.com", "1234"))
+        # Default patient
         cur.execute("SELECT * FROM patients WHERE email='test@pat.com'")
         if not cur.fetchone():
-            cur.execute("""INSERT INTO patients 
+            cur.execute("""INSERT INTO patients
                 (full_name, phone, email, height, weight, working_days, diseases, password)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                ("Test Patient","9999999999","test@pat.com",170,70,5,"None","1234"))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        ("Test Patient", "9999999999", "test@pat.com", 170, 70, 5, "None", "1234"))
         conn.commit()
-    except:
+    except sqlite3.IntegrityError:
         pass
     finally:
         conn.close()
 
 add_default_users()
-
-# -------------------------
-# Dataset Placeholder
-# -------------------------
-# Default empty dataframe for meals (no uploader)
-food_df = pd.DataFrame(columns=["Food","Category","SafeFor"])
-
-# -------------------------
-# Diet Generator
-# -------------------------
-def generate_diet(weight, height, disease=None):
-    calories = round(weight*30)
-    protein = round(weight*1.2)
-    fat = round((0.25*calories)/9)
-    carbs = round((calories - (protein*4 + fat*9))/4)
-    scale = calories/2000
-
-    plan = {
-        "Breakfast": "Ayurvedic meal + Tulsi tea",
-        "Mid-morning": "Ayurvedic snack + soaked chia seeds",
-        "Lunch": "Ayurvedic meal + Salad + Buttermilk",
-        "Snack": "Ayurvedic snack + Herbal tea",
-        "Dinner": "Ayurvedic meal + Steamed veggies + Triphala water",
-        "Bedtime": "Warm turmeric milk with ashwagandha"
-    }
-
-    nutrients = {
-        "Calories": calories,
-        "Protein (g)": protein,
-        "Carbs (g)": carbs,
-        "Fats (g)": fat,
-        "Fiber (g)": int(25*scale),
-        "Calcium (mg)": int(600*scale),
-        "Iron (mg)": int(14*scale)
-    }
-
-    return plan, nutrients
 
 # -------------------------
 # DB Helper Functions
@@ -121,7 +92,7 @@ def add_patient(full_name, phone, email, height, weight, working_days, diseases,
     cur = conn.cursor()
     cur.execute("""INSERT INTO patients
         (full_name, phone, email, height, weight, working_days, diseases, password)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         (full_name, phone, email, height, weight, working_days, diseases, password))
     conn.commit()
     conn.close()
@@ -169,9 +140,13 @@ def get_diet_plan(patient_id):
     return None
 
 # -------------------------
-# Streamlit Config & Styling
+# Streamlit Config
 # -------------------------
 st.set_page_config(page_title="AyurDiet", page_icon="🌿", layout="wide")
+
+# -------------------------
+# Session State
+# -------------------------
 if "user_role" not in st.session_state:
     st.session_state.user_role = None
 if "logged_in" not in st.session_state:
@@ -181,10 +156,26 @@ if "user_data" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state.page = "login"
 
+# -------------------------
+# UI Styling
+# -------------------------
 st.markdown("""
 <style>
-body {background: linear-gradient(to right,#f0fdf4,#e6f4ea);}
-.stButton>button{background: linear-gradient(135deg,#2d5016,#4a7c59);color:white;border-radius:10px;}
+body {
+    background: linear-gradient(to right, #f0fdf4, #e6f4ea);
+}
+.stButton>button {
+    background: linear-gradient(135deg, #2d5016, #4a7c59);
+    color: white;
+    border-radius: 10px;
+}
+.card {
+    background: #ffffffcc;
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -193,35 +184,34 @@ body {background: linear-gradient(to right,#f0fdf4,#e6f4ea);}
 # -------------------------
 def login_page():
     st.title("🌿 AyurDiet Login")
-    role = st.radio("Login as", ["Doctor","Patient"])
+    role = st.radio("Login as", ["Doctor", "Patient"])
     login_input = st.text_input("Email or Phone")
     password = st.text_input("Password", type="password")
 
     if st.button("Login"):
-        if role=="Doctor":
-            doctor = get_doctor(login_input,password)
+        if role == "Doctor":
+            doctor = get_doctor(login_input, password)
             if doctor:
-                st.session_state.logged_in=True
-                st.session_state.user_role="doctor"
-                st.session_state.user_data={"id":doctor[0],"name":doctor[1]}
+                st.session_state.logged_in = True
+                st.session_state.user_role = "doctor"
+                st.session_state.user_data = {"id": doctor[0], "name": doctor[1]}
                 st.success("Doctor logged in!")
-                st.session_state.page = "dashboard"
             else:
                 st.error("Invalid Doctor credentials")
         else:
-            patient = get_patient_by_email_or_phone(login_input,password)
+            patient = get_patient_by_email_or_phone(login_input, password)
             if patient:
-                st.session_state.logged_in=True
-                st.session_state.user_role="patient"
-                st.session_state.user_data={"id":patient[0],"name":patient[1]}
+                st.session_state.logged_in = True
+                st.session_state.user_role = "patient"
+                st.session_state.user_data = {"id": patient[0], "name": patient[1]}
                 st.success("Patient logged in!")
-                st.session_state.page = "dashboard"
             else:
                 st.error("Invalid Patient credentials")
 
-    if role=="Patient":
+    st.markdown("---")
+    if role == "Patient":
         if st.button("New user? Register here"):
-            st.session_state.page="register"
+            st.session_state.page = "register"
 
 def patient_registration_page():
     st.title("🌿 Patient Registration")
@@ -239,10 +229,10 @@ def patient_registration_page():
             try:
                 add_patient(full_name, phone, email, height, weight, working_days, diseases, password)
                 st.success("Registration successful! Please login.")
-                st.session_state.page="login"
+                st.session_state.page = "login"
             except sqlite3.IntegrityError:
                 st.error("Email or phone already exists!")
-            except Exception:
+            except Exception as e:
                 st.error("Registration failed.")
                 st.text(traceback.format_exc())
 
@@ -271,10 +261,10 @@ def doctor_dashboard():
         st.info("No patients available yet.")
 
     if st.button("Logout"):
-        st.session_state.logged_in=False
-        st.session_state.page="login"
-        st.session_state.user_role=None
-        st.session_state.user_data=None
+        st.session_state.logged_in = False
+        st.session_state.page = "login"
+        st.session_state.user_role = None
+        st.session_state.user_data = None
 
 def patient_dashboard():
     name = st.session_state.user_data.get("name") if st.session_state.user_data else "Patient"
@@ -291,31 +281,30 @@ def patient_dashboard():
         else:
             st.info("No diet plan assigned yet. Please wait for your doctor.")
     else:
-        st.error("No user id found. Please log in again.")
+        st.error("No user id found in session. Please log in again.")
 
     if st.button("Logout"):
-        st.session_state.logged_in=False
-        st.session_state.page="login"
-        st.session_state.user_role=None
-        st.session_state.user_data=None
+        st.session_state.logged_in = False
+        st.session_state.page = "login"
+        st.session_state.user_role = None
+        st.session_state.user_data = None
 
 # -------------------------
 # Main App
 # -------------------------
 def main():
     if not st.session_state.logged_in:
-        if st.session_state.page=="login":
+        if st.session_state.page == "login":
             login_page()
-        elif st.session_state.page=="register":
+        elif st.session_state.page == "register":
             patient_registration_page()
     else:
-        if st.session_state.page=="dashboard":
-            if st.session_state.user_role=="doctor":
-                doctor_dashboard()
-            elif st.session_state.user_role=="patient":
-                patient_dashboard()
-            else:
-                st.error("Unknown role. Please log out and log in again.")
+        if st.session_state.user_role == "doctor":
+            doctor_dashboard()
+        elif st.session_state.user_role == "patient":
+            patient_dashboard()
+        else:
+            st.error("Unknown user role. Please log out and log in again.")
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
