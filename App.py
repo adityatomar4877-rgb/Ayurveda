@@ -76,7 +76,7 @@ def add_default_users():
         if not cur.fetchone():
             cur.execute("""INSERT INTO patients
                 (full_name, phone, email, height, weight, working_days, diseases, password)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 ("Test Patient", "9999999999", "test@pat.com", 170, 70, 5, "None", "1234")
             )
         conn.commit()
@@ -95,7 +95,7 @@ def add_patient(full_name, phone, email, height, weight, working_days, diseases,
     cur = conn.cursor()
     cur.execute("""INSERT INTO patients
         (full_name, phone, email, height, weight, working_days, diseases, password)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         (full_name, phone, email, height, weight, working_days, diseases, password))
     conn.commit()
     conn.close()
@@ -318,3 +318,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
