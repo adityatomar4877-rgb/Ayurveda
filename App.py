@@ -123,20 +123,33 @@ def get_diet_plan(patient_id):
 # -------------------------
 st.set_page_config(page_title="AyurDiet - Ayurvedic Diet Management", page_icon="🌿", layout="wide")
 
-# CSS for clean UI
+# -------------------------
+# Custom CSS for UI & Animation
+# -------------------------
 st.markdown("""
 <style>
+body {
+    background: linear-gradient(270deg, #f0f8e9, #e2f0d9, #f0f8e9);
+    background-size: 600% 600%;
+    animation: gradientBG 30s ease infinite;
+    font-family: 'Arial', sans-serif;
+}
+@keyframes gradientBG {
+    0%{background-position:0% 50%}
+    50%{background-position:100% 50%}
+    100%{background-position:0% 50%}
+}
 .card {
-    background-color: #f9f9f9;
+    background-color: rgba(255,255,255,0.85);
     padding: 20px;
     margin-bottom: 20px;
     border-radius: 12px;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
 }
 .stButton>button {
-    padding: 8px 16px;
+    padding: 10px 20px;
     border-radius: 8px;
-    background-color: #4CAF50;
+    background: linear-gradient(135deg, #2d5016, #4a7c59);
     color: white;
     font-weight: bold;
 }
@@ -149,7 +162,9 @@ h4, h5 {
 </style>
 """, unsafe_allow_html=True)
 
+# -------------------------
 # Initialize session
+# -------------------------
 if "user_role" not in st.session_state:
     st.session_state.user_role = None
 if "logged_in" not in st.session_state:
@@ -162,9 +177,7 @@ if "user_data" not in st.session_state:
 # -------------------------
 def login_page():
     st.title("🌿 AyurDiet Login")
-
     role = st.radio("Login as", ["Doctor", "Patient"])
-
     email = st.text_input("Email")
     password = st.text_input("Password", type="password")
 
@@ -196,7 +209,6 @@ def login_page():
 
 def patient_registration_page():
     st.title("🌿 Patient Registration")
-
     with st.form("register_form"):
         full_name = st.text_input("Full Name")
         phone = st.text_input("Phone Number")
@@ -215,19 +227,17 @@ def patient_registration_page():
 def doctor_dashboard():
     st.title("🩺 Doctor Dashboard")
     df = get_all_patients()
-
     st.subheader("Patient List")
     st.dataframe(df, use_container_width=True)
 
     st.markdown("---")
     st.subheader("Assign Diet Plan")
-
     patient_ids = df["id"].tolist()
     if patient_ids:
         selected_id = st.selectbox("Select Patient ID", patient_ids)
-        breakfast = st.text_area("Breakfast Plan")
-        lunch = st.text_area("Lunch Plan")
-        dinner = st.text_area("Dinner Plan")
+        breakfast = st.text_area("🥞 Breakfast Plan")
+        lunch = st.text_area("🥗 Lunch Plan")
+        dinner = st.text_area("🌙 Dinner Plan")
 
         if st.button("Save Diet Plan"):
             set_diet_plan(selected_id, breakfast, lunch, dinner)
@@ -239,7 +249,6 @@ def patient_dashboard():
 
     st.markdown("---")
     st.subheader("Your Assigned Diet Plan")
-
     plan = get_diet_plan(st.session_state.user_data["id"])
     if plan:
         for meal, desc in plan.items():
