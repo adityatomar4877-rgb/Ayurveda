@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-import random
 import traceback
 
 # -------------------------
@@ -58,20 +57,16 @@ def create_tables():
 create_tables()
 
 # -------------------------
-# Insert default users (safe)
+# Add default users
 # -------------------------
 def add_default_users():
     conn = get_connection()
     cur = conn.cursor()
-
     try:
-        # Default Doctor
         cur.execute("SELECT * FROM doctors WHERE email='doctor@ayur.com'")
         if not cur.fetchone():
             cur.execute("INSERT INTO doctors (name, email, password) VALUES (?, ?, ?)",
                         ("Dr. Smith", "doctor@ayur.com", "1234"))
-
-        # Default Patient
         cur.execute("SELECT * FROM patients WHERE email='test@pat.com'")
         if not cur.fetchone():
             cur.execute("""INSERT INTO patients
@@ -143,20 +138,9 @@ def get_diet_plan(patient_id):
     return None
 
 # -------------------------
-# Diet Generator (simple)
-# -------------------------
-def generate_diet(weight, height, disease=None):
-    plan = {
-        "Breakfast": "Oatmeal with honey",
-        "Lunch": "Brown rice with vegetables",
-        "Dinner": "Lentil soup with salad"
-    }
-    return plan
-
-# -------------------------
 # Streamlit Config
 # -------------------------
-st.set_page_config(page_title="AyurDiet", page_icon="🌿", layout="wide")
+st.set_page_config(page_title="AyurDiet 🌿", page_icon="🌱", layout="wide")
 
 if "user_role" not in st.session_state:
     st.session_state.user_role = None
@@ -173,12 +157,13 @@ if "page" not in st.session_state:
 st.markdown("""
 <style>
 body {
-    background: linear-gradient(to right, #f0fdf4, #e6f4ea);
+    background: linear-gradient(to right, #e6f4ea, #f0fdf4);
 }
 .stButton>button {
     background: linear-gradient(135deg, #2d5016, #4a7c59);
     color: white;
     border-radius: 10px;
+    height: 40px;
 }
 .card {
     background: #ffffffcc;
@@ -186,6 +171,9 @@ body {
     border-radius: 15px;
     box-shadow: 0 8px 20px rgba(0,0,0,0.1);
     margin-bottom: 20px;
+}
+h2 {
+    color: #2d5016;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -254,8 +242,20 @@ def patient_registration_page():
 def doctor_dashboard():
     st.title("🩺 Doctor Dashboard")
     df = get_all_patients()
-    st.subheader("Patient List")
-    st.dataframe(df, use_container_width=True)
+    if not df.empty:
+        st.subheader("Patient List")
+        for _, row in df.iterrows():
+            st.markdown(f"""
+            <div class="card">
+                <h4>{row['full_name']}</h4>
+                <p>Email: {row['email']}</p>
+                <p>Phone: {row['phone']}</p>
+                <p>Height: {row['height']} cm | Weight: {row['weight']} kg</p>
+                <p>Diseases: {row['diseases']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("No patients registered yet.")
 
     st.markdown("---")
     st.subheader("Assign Diet Plan")
@@ -268,8 +268,6 @@ def doctor_dashboard():
         if st.button("Save Diet Plan"):
             set_diet_plan(selected_id, breakfast, lunch, dinner)
             st.success("Diet plan saved!")
-    else:
-        st.info("No patients available yet.")
 
     if st.button("Logout"):
         st.session_state.logged_in = False
@@ -279,17 +277,19 @@ def doctor_dashboard():
 
 def patient_dashboard():
     name = st.session_state.user_data.get("name") if st.session_state.user_data else "Patient"
-    st.title("👤 Patient Dashboard")
-    st.write(f"Welcome, {name}")
-    st.markdown("---")
-
+    st.title(f"👤 Welcome {name}")
     user_id = st.session_state.user_data.get("id") if st.session_state.user_data else None
     if user_id:
         plan = get_diet_plan(user_id)
         st.subheader("Your Assigned Diet Plan")
         if plan:
             for meal, desc in plan.items():
-                st.markdown(f"{meal}:** {desc}")
+                st.markdown(f"""
+                <div class="card">
+                    <h4>{meal}</h4>
+                    <p>{desc}</p>
+                </div>
+                """, unsafe_allow_html=True)
         else:
             st.info("No diet plan assigned yet. Please wait for your doctor.")
 
@@ -318,4 +318,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
