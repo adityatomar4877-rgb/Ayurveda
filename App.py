@@ -1,7 +1,6 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-from datetime import datetime
 
 # ----------------------------
 # Database Setup
@@ -10,7 +9,6 @@ def init_db():
     conn = sqlite3.connect("ayurdiet.db")
     c = conn.cursor()
 
-    # Patients Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS patients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,7 +23,6 @@ def init_db():
         )
     """)
 
-    # Doctors Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS doctors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,7 +31,6 @@ def init_db():
         )
     """)
 
-    # Diet Plans Table
     c.execute("""
         CREATE TABLE IF NOT EXISTS diet_plans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,28 +60,43 @@ st.set_page_config(
 )
 
 # ----------------------------
-# Custom CSS
+# Custom CSS with Animation
 # ----------------------------
 st.markdown("""
 <style>
     body {
-        background: url('https://img.freepik.com/free-photo/ayurvedic-herbs-natural-medicine_23-2149390639.jpg') no-repeat center center fixed;
-        background-size: cover;
+        background: linear-gradient(270deg, #d2f8d2, #fdf7e3, #ffe5b4);
+        background-size: 600% 600%;
+        animation: gradientBG 20s ease infinite;
+    }
+    @keyframes gradientBG {
+        0% {background-position: 0% 50%;}
+        50% {background-position: 100% 50%;}
+        100% {background-position: 0% 50%;}
     }
     .main-header {
         text-align: center;
         padding: 2rem;
-        background: rgba(45, 80, 22, 0.9);
+        background: rgba(45, 80, 22, 0.85);
         color: white;
         border-radius: 15px;
         margin-bottom: 2rem;
+        animation: fadeIn 2s ease;
+    }
+    @keyframes fadeIn {
+        from {opacity: 0;}
+        to {opacity: 1;}
     }
     .ayur-card {
-        background: rgba(255, 255, 255, 0.9);
+        background: rgba(255, 255, 255, 0.92);
         padding: 2rem;
         border-radius: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.2);
         margin: 1rem 0;
+        transition: transform 0.3s ease;
+    }
+    .ayur-card:hover {
+        transform: translateY(-5px);
     }
     .stButton > button {
         background: linear-gradient(135deg, #2d5016, #4a7c59);
@@ -98,7 +109,7 @@ st.markdown("""
         transition: 0.3s;
     }
     .stButton > button:hover {
-        transform: scale(1.05);
+        transform: scale(1.08);
         background: linear-gradient(135deg, #8b4513, #daa520);
     }
 </style>
@@ -217,14 +228,23 @@ def doctor_dashboard():
     </div>
     """, unsafe_allow_html=True)
 
-    st.metric("Active Patients", "32")
-    st.metric("Diet Plans Created", "18")
-
-    st.write("📋 Patient List")
     conn = sqlite3.connect("ayurdiet.db")
     df = pd.read_sql("SELECT id, full_name, email, height, weight FROM patients", conn)
     conn.close()
     st.dataframe(df)
+
+    st.subheader("📋 Assign Diet Plan")
+    patient_id = st.selectbox("Select Patient", df["id"].tolist() if not df.empty else [])
+    plan_text = st.text_area("Enter Diet Plan")
+
+    if st.button("💾 Save Plan"):
+        if patient_id and plan_text:
+            conn = sqlite3.connect("ayurdiet.db")
+            c = conn.cursor()
+            c.execute("INSERT INTO diet_plans (patient_id, plan) VALUES (?, ?)", (patient_id, plan_text))
+            conn.commit()
+            conn.close()
+            st.success("✅ Plan saved successfully!")
 
     if st.button("🚪 Logout"):
         st.session_state.page = "landing"
@@ -242,13 +262,20 @@ def patient_dashboard():
     c = conn.cursor()
     c.execute("SELECT full_name, height, weight, diseases FROM patients WHERE id=?", (st.session_state.user_id,))
     patient = c.fetchone()
-    conn.close()
 
     st.subheader(f"Welcome, {patient[0]} 🌱")
     st.write(f"Height: {patient[1]} cm | Weight: {patient[2]} kg")
     st.write(f"Diseases: {patient[3]}")
 
-    st.info("🥗 Your personalized diet plan will appear here soon!")
+    c.execute("SELECT plan FROM diet_plans WHERE patient_id=?", (st.session_state.user_id,))
+    plan = c.fetchone()
+    conn.close()
+
+    if plan:
+        st.success("🥗 Your Diet Plan:")
+        st.markdown(f"<div class='ayur-card'><p>{plan[0]}</p></div>", unsafe_allow_html=True)
+    else:
+        st.info("⚠️ No diet plan assigned yet. Please wait for your doctor.")
 
     if st.button("🚪 Logout"):
         st.session_state.page = "landing"
