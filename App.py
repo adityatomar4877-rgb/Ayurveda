@@ -15,8 +15,6 @@ def get_connection():
 def create_tables():
     conn = get_connection()
     cur = conn.cursor()
-
-    # Patients
     cur.execute("""
     CREATE TABLE IF NOT EXISTS patients (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,8 +28,6 @@ def create_tables():
         password TEXT
     )
     """)
-
-    # Doctors
     cur.execute("""
     CREATE TABLE IF NOT EXISTS doctors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,8 +36,6 @@ def create_tables():
         password TEXT
     )
     """)
-
-    # Diet Plans
     cur.execute("""
     CREATE TABLE IF NOT EXISTS diet_plans (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,15 +77,10 @@ def add_default_users():
 add_default_users()
 
 # -------------------------
-# Load Dataset
+# Dataset Placeholder
 # -------------------------
-st.sidebar.header("Upload Dataset")
-uploaded_file = st.sidebar.file_uploader("Upload Ayurvedic Food Dataset (CSV)", type="csv")
-if uploaded_file:
-    food_df = pd.read_csv(uploaded_file)
-else:
-    st.sidebar.warning("⚠ Dataset not found. Default meals will be used.")
-    food_df = pd.DataFrame(columns=["Food","Category","SafeFor"])
+# Default empty dataframe for meals (no uploader)
+food_df = pd.DataFrame(columns=["Food","Category","SafeFor"])
 
 # -------------------------
 # Diet Generator
@@ -103,24 +92,12 @@ def generate_diet(weight, height, disease=None):
     carbs = round((calories - (protein*4 + fat*9))/4)
     scale = calories/2000
 
-    if disease:
-        disease = disease.lower()
-        safe_foods = food_df[food_df["SafeFor"].str.contains(disease, case=False, na=False)]
-        if safe_foods.empty:
-            safe_foods = food_df
-    else:
-        safe_foods = food_df
-
-    def pick_food(category):
-        items = safe_foods[safe_foods["Category"]==category]
-        return random.choice(items["Food"].tolist()) if not items.empty else "Ayurvedic meal"
-
     plan = {
-        "Breakfast": f"{pick_food('Breakfast')} + Tulsi tea",
-        "Mid-morning": f"{pick_food('Snack')} + soaked chia seeds",
-        "Lunch": f"{pick_food('Lunch')} + Salad + Buttermilk",
-        "Snack": f"{pick_food('Snack')} + Herbal tea",
-        "Dinner": f"{pick_food('Dinner')} + Steamed veggies + Triphala water",
+        "Breakfast": "Ayurvedic meal + Tulsi tea",
+        "Mid-morning": "Ayurvedic snack + soaked chia seeds",
+        "Lunch": "Ayurvedic meal + Salad + Buttermilk",
+        "Snack": "Ayurvedic snack + Herbal tea",
+        "Dinner": "Ayurvedic meal + Steamed veggies + Triphala water",
         "Bedtime": "Warm turmeric milk with ashwagandha"
     }
 
@@ -228,7 +205,7 @@ def login_page():
                 st.session_state.user_role="doctor"
                 st.session_state.user_data={"id":doctor[0],"name":doctor[1]}
                 st.success("Doctor logged in!")
-                st.experimental_rerun()
+                st.session_state.page = "dashboard"
             else:
                 st.error("Invalid Doctor credentials")
         else:
@@ -238,14 +215,13 @@ def login_page():
                 st.session_state.user_role="patient"
                 st.session_state.user_data={"id":patient[0],"name":patient[1]}
                 st.success("Patient logged in!")
-                st.experimental_rerun()
+                st.session_state.page = "dashboard"
             else:
                 st.error("Invalid Patient credentials")
 
     if role=="Patient":
         if st.button("New user? Register here"):
             st.session_state.page="register"
-            st.experimental_rerun()
 
 def patient_registration_page():
     st.title("🌿 Patient Registration")
@@ -264,7 +240,6 @@ def patient_registration_page():
                 add_patient(full_name, phone, email, height, weight, working_days, diseases, password)
                 st.success("Registration successful! Please login.")
                 st.session_state.page="login"
-                st.experimental_rerun()
             except sqlite3.IntegrityError:
                 st.error("Email or phone already exists!")
             except Exception:
@@ -300,7 +275,6 @@ def doctor_dashboard():
         st.session_state.page="login"
         st.session_state.user_role=None
         st.session_state.user_data=None
-        st.experimental_rerun()
 
 def patient_dashboard():
     name = st.session_state.user_data.get("name") if st.session_state.user_data else "Patient"
@@ -324,7 +298,6 @@ def patient_dashboard():
         st.session_state.page="login"
         st.session_state.user_role=None
         st.session_state.user_data=None
-        st.experimental_rerun()
 
 # -------------------------
 # Main App
@@ -336,12 +309,13 @@ def main():
         elif st.session_state.page=="register":
             patient_registration_page()
     else:
-        if st.session_state.user_role=="doctor":
-            doctor_dashboard()
-        elif st.session_state.user_role=="patient":
-            patient_dashboard()
-        else:
-            st.error("Unknown role. Log out and login again.")
+        if st.session_state.page=="dashboard":
+            if st.session_state.user_role=="doctor":
+                doctor_dashboard()
+            elif st.session_state.user_role=="patient":
+                patient_dashboard()
+            else:
+                st.error("Unknown role. Please log out and log in again.")
 
 if __name__=="__main__":
     main()
