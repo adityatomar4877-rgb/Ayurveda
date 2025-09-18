@@ -60,19 +60,17 @@ st.set_page_config(
 )
 
 # ----------------------------
-# Custom CSS with Animation
+# Custom CSS
 # ----------------------------
 st.markdown("""
 <style>
     body {
-        background: linear-gradient(270deg, #d2f8d2, #fdf7e3, #ffe5b4);
-        background-size: 600% 600%;
-        animation: gradientBG 20s ease infinite;
-    }
-    @keyframes gradientBG {
-        0% {background-position: 0% 50%;}
-        50% {background-position: 100% 50%;}
-        100% {background-position: 0% 50%;}
+        background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.7)), 
+                    url('https://img.freepik.com/free-photo/ayurvedic-herbs-natural-medicine_23-2149390639.jpg');
+        background-size: cover;
+        background-attachment: fixed;
+        background-position: center;
+        color: white;
     }
     .main-header {
         text-align: center;
@@ -81,11 +79,6 @@ st.markdown("""
         color: white;
         border-radius: 15px;
         margin-bottom: 2rem;
-        animation: fadeIn 2s ease;
-    }
-    @keyframes fadeIn {
-        from {opacity: 0;}
-        to {opacity: 1;}
     }
     .ayur-card {
         background: rgba(255, 255, 255, 0.92);
@@ -93,10 +86,7 @@ st.markdown("""
         border-radius: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.2);
         margin: 1rem 0;
-        transition: transform 0.3s ease;
-    }
-    .ayur-card:hover {
-        transform: translateY(-5px);
+        color: black;
     }
     .stButton > button {
         background: linear-gradient(135deg, #2d5016, #4a7c59);
@@ -124,6 +114,34 @@ if "user_role" not in st.session_state:
     st.session_state.user_role = None
 if "user_id" not in st.session_state:
     st.session_state.user_id = None
+
+# ----------------------------
+# Diet Plan Generator
+# ----------------------------
+def generate_diet_plan(height, weight, diseases, working_days):
+    bmi = round(weight / ((height/100) ** 2), 1)
+    plan = f"🧘 BMI: {bmi}\n\n"
+
+    if bmi < 18.5:
+        plan += "🍚 Eat calorie-dense foods like rice, ghee, nuts, and milk.\n"
+    elif bmi < 24.9:
+        plan += "🥗 Balanced diet with vegetables, fruits, pulses, and whole grains.\n"
+    else:
+        plan += "🥒 Focus on light meals, avoid fried foods, add detox teas and fruits.\n"
+
+    if diseases:
+        if "diabetes" in diseases.lower():
+            plan += "🚫 Avoid sugar, take bitter gourd juice, more green leafy vegetables.\n"
+        if "bp" in diseases.lower() or "hypertension" in diseases.lower():
+            plan += "🧂 Low salt diet, add garlic and tulsi tea.\n"
+
+    if working_days >= 5:
+        plan += "💪 Add high-protein foods (dal, paneer, sprouts) to sustain energy.\n"
+
+    plan += "\n🌿 Hydrate with warm water + herbal teas.\n"
+    plan += "🛌 Sleep at least 7-8 hours daily.\n"
+
+    return plan
 
 # ----------------------------
 # Pages
@@ -229,22 +247,33 @@ def doctor_dashboard():
     """, unsafe_allow_html=True)
 
     conn = sqlite3.connect("ayurdiet.db")
-    df = pd.read_sql("SELECT id, full_name, email, height, weight FROM patients", conn)
+    df = pd.read_sql("SELECT id, full_name, email, height, weight, diseases, working_days FROM patients", conn)
     conn.close()
     st.dataframe(df)
 
-    st.subheader("📋 Assign Diet Plan")
-    patient_id = st.selectbox("Select Patient", df["id"].tolist() if not df.empty else [])
-    plan_text = st.text_area("Enter Diet Plan")
+    if not df.empty:
+        st.subheader("📋 Assign Diet Plan")
+        patient_id = st.selectbox("Select Patient", df["id"].tolist())
+        plan_text = st.text_area("Enter Diet Plan")
 
-    if st.button("💾 Save Plan"):
-        if patient_id and plan_text:
-            conn = sqlite3.connect("ayurdiet.db")
-            c = conn.cursor()
-            c.execute("INSERT INTO diet_plans (patient_id, plan) VALUES (?, ?)", (patient_id, plan_text))
-            conn.commit()
-            conn.close()
-            st.success("✅ Plan saved successfully!")
+        if st.button("✨ Auto Generate Plan"):
+            row = df[df["id"] == patient_id].iloc[0]
+            plan_text = generate_diet_plan(row["height"], row["weight"], row["diseases"], row["working_days"])
+            st.session_state.generated_plan = plan_text
+
+        if "generated_plan" in st.session_state:
+            st.info("Generated Plan:")
+            st.write(st.session_state.generated_plan)
+            plan_text = st.session_state.generated_plan
+
+        if st.button("💾 Save Plan"):
+            if patient_id and plan_text:
+                conn = sqlite3.connect("ayurdiet.db")
+                c = conn.cursor()
+                c.execute("INSERT INTO diet_plans (patient_id, plan) VALUES (?, ?)", (patient_id, plan_text))
+                conn.commit()
+                conn.close()
+                st.success("✅ Plan saved successfully!")
 
     if st.button("🚪 Logout"):
         st.session_state.page = "landing"
