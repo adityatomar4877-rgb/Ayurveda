@@ -1,6 +1,6 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
+import sqlite3
 import traceback
 
 # -------------------------
@@ -54,12 +54,11 @@ def create_tables():
 create_tables()
 
 # -------------------------
-# Insert default users
+# Insert default users safely
 # -------------------------
 def add_default_users():
     conn = get_connection()
     cur = conn.cursor()
-
     try:
         # Default Doctor
         cur.execute("SELECT * FROM doctors WHERE email='doctor@ayur.com'")
@@ -72,7 +71,7 @@ def add_default_users():
         if not cur.fetchone():
             cur.execute("""INSERT INTO patients
                 (full_name, phone, email, height, weight, working_days, diseases, password)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 ("Test Patient", "9999999999", "test@pat.com", 170, 70, 5, "None", "1234")
             )
         conn.commit()
@@ -91,7 +90,7 @@ def add_patient(full_name, phone, email, height, weight, working_days, diseases,
     cur = conn.cursor()
     cur.execute("""INSERT INTO patients
         (full_name, phone, email, height, weight, working_days, diseases, password)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         (full_name, phone, email, height, weight, working_days, diseases, password))
     conn.commit()
     conn.close()
@@ -139,7 +138,7 @@ def get_diet_plan(patient_id):
     return None
 
 # -------------------------
-# Streamlit Config & Session
+# Streamlit Config
 # -------------------------
 st.set_page_config(page_title="AyurDiet", page_icon="🌿", layout="wide")
 
@@ -165,13 +164,6 @@ body {
     color: white;
     border-radius: 10px;
 }
-.card {
-    background: #ffffffcc;
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -191,8 +183,8 @@ def login_page():
                 st.session_state.logged_in = True
                 st.session_state.user_role = "doctor"
                 st.session_state.user_data = {"id": doctor[0], "name": doctor[1]}
-                st.session_state.page = "dashboard"
                 st.success("Doctor logged in!")
+                st.session_state.page = "dashboard"
             else:
                 st.error("Invalid Doctor credentials")
         else:
@@ -201,11 +193,11 @@ def login_page():
                 st.session_state.logged_in = True
                 st.session_state.user_role = "patient"
                 st.session_state.user_data = {"id": patient[0], "name": patient[1]}
-                st.session_state.page = "dashboard"
                 st.success("Patient logged in!")
+                st.session_state.page = "dashboard"
             else:
                 st.error("Invalid Patient credentials")
-
+    st.markdown("---")
     if role == "Patient":
         if st.button("New user? Register here"):
             st.session_state.page = "register"
@@ -229,7 +221,7 @@ def patient_registration_page():
                 st.session_state.page = "login"
             except sqlite3.IntegrityError:
                 st.error("Email or phone already exists!")
-            except Exception as e:
+            except Exception:
                 st.error("Registration failed.")
                 st.text(traceback.format_exc())
 
@@ -274,11 +266,11 @@ def patient_dashboard():
         st.subheader("Your Assigned Diet Plan")
         if plan:
             for meal, desc in plan.items():
-                st.markdown(f"{meal}: **{desc}")
+                st.markdown(f"{meal}:** {desc}")
         else:
             st.info("No diet plan assigned yet. Please wait for your doctor.")
     else:
-        st.error("No user id found. Please login again.")
+        st.error("No user id found in session. Please log in again.")
 
     if st.button("Logout"):
         st.session_state.logged_in = False
@@ -287,7 +279,7 @@ def patient_dashboard():
         st.session_state.user_data = None
 
 # -------------------------
-# Main App Controller
+# Main App
 # -------------------------
 def main():
     if not st.session_state.logged_in:
@@ -296,6 +288,9 @@ def main():
         elif st.session_state.page == "register":
             patient_registration_page()
     else:
+        if st.session_state.page != "dashboard":
+            st.session_state.page = "dashboard"
+
         if st.session_state.user_role == "doctor":
             doctor_dashboard()
         elif st.session_state.user_role == "patient":
